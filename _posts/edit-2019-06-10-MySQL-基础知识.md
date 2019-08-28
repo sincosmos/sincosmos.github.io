@@ -9,7 +9,6 @@ catalog: true
 tags:
     - MySQL
 ---
-# 数据存储
 ## MySQL 数据库
 ### 物理文件组成
 1. 日志文件：error log (hostname.err), binlog (mysql-bin.******, mysql-bin.index), slow query log (hostname-slow.log), redo log(Inndo 事务日志，配合表中 undo 信息，保证事务安全性）

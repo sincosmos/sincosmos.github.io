@@ -1,7 +1,7 @@
 # Site settings
-title: kleguan's blog
-SEOTitle: sincosmos | BY Blog
-header-img: img/post-bg-desk.jpg
+title: sincosmos's blog
+SEOTitle: sincosmos | Tech Blog
+header-img: img/post-bg-2015.jpg
 email: kleguan@hotmail.com
 description: "所赖君子见机，达人知命。老当益壮，宁移白首之心；穷且益坚，不坠青云之志。"
 keyword: "sincosmos 的博客, java, 大数据, Hadoop, Spark"
@@ -11,7 +11,7 @@ github_repo: "https://github.com/sincosmos/sincosmos.github.io.git" # you code r
 
 # Sidebar settings
 sidebar: true                           # whether or not using Sidebar.
-sidebar-about-description: "Keep running"
+sidebar-about-description: "勿意，勿必，勿固，勿我"
 sidebar-avatar: /img/avatar_m.jpg      # use absolute URL, seeing it's used in both `/` and `/about/`
 
 

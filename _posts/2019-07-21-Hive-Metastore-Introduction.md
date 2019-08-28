@@ -7,8 +7,8 @@
  header-img: img/post-bg-BJJ.jpg
  catalog: true
  tags:
--    - Hive
-2---
+    - Hive
+---
 # Hive metastore
 Hive 为存储在分布式文件存储系统上的数据提供一层类似数据库表的结构信息(元信息，metadata)，以便用户以 Hive SQL 的方式访问相应的数据。这里的分布式文件存储系统最基本的是 HDFS，也支持例如 Amazon S3 这样的云存储系统。
 Hive 将元信息例如 schema, partition 等存放到一个 hive 自用的数据库中，并通过 metastore service 对外提供服务。这个自用的数据库可以是内嵌的 derby（默认，只能单进程访问，只作测试用）、外部数据库例如 mysql。启动 hive 时，默认在同一个 jvm 中启动了 metastore service，默认状态下，客户端将通过该 metastore service 连接内嵌的 derby 进行服务。 

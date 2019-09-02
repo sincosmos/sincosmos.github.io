@@ -89,7 +89,7 @@ CMD ["python", "app.py"]
 # 这种将宿主机目录和容器目录进行绑定的挂载叫作 bind mount，现在一般不推荐使用
 $ docker run --name sepcify-container-name -it -v /host/dir:/container-dir image-name /bin/bash
 # 除了使用 -v 标识，还可以使用 --mount 标识进行挂载，--mount 标识更加明确，应该优先使用
-# docker run -d -it --name container-name --mount type=bind,source=/host/dir,taregt=/container-dir image-name
+# docker run -d -it --name container-name --mount type=bind,source=/host/dir,target=/container-dir image-name
 
 # 下面命令启动容器后，对 /container-dir 下文件内容的操作也会持久化到宿主机对应目录下，只不过宿主机的对应目录时自动生成的
 # 例如 /var/lib/docker/volumes/0ab0aaf0d6ef391cb68b72bd8c43216a8f8ae9205f0ae941ef16ebe32dc9fc01/_data

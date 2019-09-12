@@ -1,6 +1,6 @@
 ---
 layout:     post
-title:      MySQL 基础知识
+title:      MySQL 基础知识汇总
 subtitle:   学习笔记
 date:       2019-06-10
 author:     sincosmos
@@ -9,32 +9,32 @@ catalog: true
 tags:
     - MySQL
 ---
-## MySQL 数据库
-### 物理文件组成
+
+## 物理文件组成
 1. 日志文件：error log (hostname.err), binlog (mysql-bin.******, mysql-bin.index), slow query log (hostname-slow.log), redo log(Inndo 事务日志，配合表中 undo 信息，保证事务安全性）
-2. 数据文件：table-name.frm (metadata of the table), table-name.MYD (MyISAM 表数据文件），table-name.MYI（MyISAM 表索引文件），table-name.ibd 或 .ibdata (innodb 独享或共享数据文件)
-3. Replication 相关文件：master.info (保存在 slave 端数据目录下，存放 master 的主机地址/端口、连接用户/密码，当前日志位置，已读取到的日志位置信息)，mysql-relay-bin.xxxxxn （存放 slave I/O 线程从 Master 端读取的 binlog 信息，然后由 Slave 端的 SQL 线程解析并转化成 Master 端执行的 SQL，从而可以在 slave 同步执行），mysql-relay-bin.index (记录relay log 存放的绝对路径)，relay-log.info
+2. 数据文件
+   1) MyISAM 存储引擎：table-name.frm (metadata of the table), table-name.MYD (MyISAM 表数据文件），table-name.MYI（MyISAM 表索引文件，非聚簇索引）；
+   2) InnoDB 存储引擎：table-name.frm (metadata of the table), table-name.ibd（表独享数据文件时）或 .ibdata (表共享数据文件时)，InnoDB 的主键索引是聚簇索引，辅助索引是非聚簇索引，索引和数据都存储在表文件里。  
+   如果不单独配置，则可以在 mysql 安装目录 $MYSQL_HOME/data 下查看到上述文件
+3. Replication 相关文件：master.info (保存在 slave 端数据目录下，存放 master 的主机地址/端口、连接用户/密码，当前日志位置，已读取到的日志位置信息)，mysql-relay-bin.xxxxxn （存放 slave I/O 线程从 Master 端读取的 binlog 信息，然后由 Slave 端的 SQL 线程解析并转化成 Master 端执行的 SQL，从而可以在 slave 同步执行），mysql-relay-bin.index (记录relay log 存放的绝对路径)，relay-log.info  
+   一般情况下，需要设置打开相应日志，mysql 才会记录相应的日志。对于 binlog 来说，在 mysql 的配置文件 my.cnf 中添加 
+   ```
+   log-bin=mysql-bin
+   binlog_format="MIXED"
+   ```
+   即可开启 binlog 记录。目前 mysql 支持三种 binlog 格式，ROW, STATEMENT 和 MIXED。
+   master 会在数据目录下生成 mysql-bin.******(* 代表 0～9 数字，表示日志的序号) 日志文件，同时生成 mysql-bin.index 文件，记录所有 binlog 的绝对路径，便于其它线程能顺利找到所需的 binlog。slave 端启动线程从 master 同步 binary log，并存放为 mysql-relay-bin.****** 文件，slave 端的 SQL 线程读取并解析 binlog，转化为可执行的 SQL 进行同步操作。
 4. 其它文件：my.cnf, pid file (linux), socket file (linux)
-### 逻辑架构
+## 逻辑架构
 总的来说，Mysql 可以看成是二层架构，第一层通常叫做 SQL layer，在 MySQL 数据库系统处理底层数据之前的所有工作都在这一层完成，包括权限判断、SQL 解析、执行计划优化、Query cache 的处理等；第二层是存储引擎层，也就是底层数据存取操作实现，由多种存储引擎组成。
 还可以把 SQL layer 层拆分为服务层和核心层，服务层主要负责和用户的交互工作，例如连接处理、授权认证、安全等；核心层主要负责数据存取预处理，例如SQL 解析、查询缓存、执行计划优化等。
 可以通过下图来了解，当一条 SQL 发送到 mysql 服务器后是怎样被执行的。
 ![sql 的执行过程](https://user-gold-cdn.xitu.io/2018/8/12/1652e56415e9a6f4?imageView2/0/w/1280/h/960/format/webp/ignore-error/1)
 Mysql 缓存由`query_cache_type`参数控制打开，由 `query_cache_size` 控制缓存可用空间大小，`query_cache_limit` 控制每次能够缓存的最大结果集(`show variables like '%cache%'`)。可以通过 `show status like '%cache%'`中 `Qcache_hits` 和 `Qcache_inserts` 等来查看缓存的使用状态。MySQL将缓存存放在一个引用表（不要理解成table，可以认为是类似于HashMap的数据结构），通过一个哈希值索引，这个哈希值通过查询本身、当前要查询的数据库、客户端协议版本号等一些可能影响结果的信息计算得来。所以两个查询在任何字符上的不同（例如：空格、注释），都会导致缓存不会命中。如果查询中包含任何用户自定义函数、存储函数、用户变量、临时表、mysql库中的系统表，其查询结果都不会被缓存。比如函数NOW()或者CURRENT_DATE()会因为不同的查询时间，返回不同的查询结果，再比如包含CURRENT_USER或者CONNECION_ID()的查询语句会因为不同的用户而返回不同的结果，将这样的查询结果缓存起来没有任何的意义。既然是缓存，就会失效，那查询缓存何时失效呢？MySQL的查询缓存系统会跟踪查询中涉及的每个表，如果这些表（数据或结构）发生变化，那么和这张表相关的所有缓存数据都将失效。正因为如此，在任何的写操作时，MySQL必须将对应表的所有缓存都设置为失效。
 [MySQL逻辑架构及性能优化原理](https://juejin.im/post/5c3ef9e051882525dc62de87)
-### 存储引擎与索引原理
-参考资料 [MySQL索引背后的数据结构及算法原理](http://blog.codinglabs.org/articles/theory-of-mysql-index.html)  
-1) MySQL 常用的存储引擎有 MyISAM 和 InnoDB。前者不支持事务，在更新时使用表级锁，查询速度很快，适合更新少，查询多的业务场景；后者支持事务和行级锁，因此更适合并发操作和更新较多的业务场景。另外，MyISAM 不支持外键关联。  
-2) B-tree is a fat tree. The height of B-Trees is kept low by putting maximum possible keys in a B-Tree node. Generally, a B-Tree node size is kept equal to the disk block size. Since h is low for B-Tree, total disk accesses for most of the operations are reduced significantly compared to balanced Binary Search Trees like AVL Tree, Red-Black Tree, ..etc.  
-3) In B Tree, Keys and records both can be stored in the internal as well as leaf nodes. Whereas, in B+ tree, records (data) can only be stored on the leaf nodes while internal nodes can only store the key values.
-4) The leaf nodes of a B+ tree are linked together in the form of a singly linked lists to make the search queries more efficient.  
-5) 为什么 Mysql 索引用 B+ 树而不是 B 树？B 树的节点需要存储数据，而 B+ 树只有叶子结点存储数据，这样在节点大小（通常是磁盘页的大小）一定的情况下，B 树内部节点能存储的索引数量就大大少于 B+ 树内部节点存储的索引的数量，导致同样的检索，B 树很可能要读更多的页，即磁盘 IO 次数回增多，检索效率下降。另外 B+ 树的叶子节点会顺序存储下一个叶子节点的地址指针，在区间访问时，能够进一步减少磁盘 IO 次数。
-6) 假设在表 A 上经常用到的两个查询语句是 select colx from A where col2=? and col1=? 和 select coly from A where col1 like 'sample%'，应该怎么建立索引比较好？可以考虑建立一个联合索引，create index composite_index_cols on A (col1, col2)。对于前者来说，SQL 解析器会自动调整两个条件的顺序，这样两个查询都能用到这个索引，加快查询效率。
-7) MyISAM 的主键索引和非主键索引都是非聚簇索引，叶子节点数据区存放的都是数据地址。一个 MyISAM 的表会被存放为三个以表名命名的物理文件，.frm 文件记录表结构定义信息，.MYD 文件存放表的数据，.MYI 文件存放表的索引。InnoDB 的主键索引是聚簇索引，叶子节点的数据就是数据本身，非主键索引是非聚簇索引，数据区存放的是主键。因此 MyISAM 表可以没有主键，而 InnoDB 的表如果不指定主键，则会由存储引擎生成一个全局的 rowid 序列作为主键，所有不指定主键的表共享同一个 rowid 序列，并发性能差，因此一般都需要指定主键。一个 InnoDB 的表会被存储为两个物理文件，.frm 文件记录表结构，.ibd (独享表)或 ibdata（共享表） 文件存储表数据和索引；另外，InnoDB 还有事务日志信息文件，可以通过 redo 日志和表中 undo 信息进行事务管理或数据库恢复(数据库恢复时，采用 checkpoint 机制，即 checkpoint 之前的操作已经持久化到磁盘，数据库恢复不用重做所有的 redo 日志，只需按照 checkpoint 之后的操作进行恢复即可)。
-8) 索引是存储引擎级别的实现，不同的存储引擎可能采用不同的索引类型和实现方式。B+ 树是大多数 mysql 存储引擎默认的索引类型。
-9) 联合索引实际上是按照联合索引的第一列建立 B+ 树，非叶子节点上的 key 是第一列的值，叶子节点上保存了联合索引中所有列的值并按照第一列、第二列...依次排序。
-10) mysql 数据库的主从同步是通过 binlog 实现的。slave mysql 服务器数据目录下，存放的 master.info 文件保存 master 的主机地址/端口、连接用户/密码等，以便 slave 连接 master。master 和 slave 机器启动 mysql 服务时，显式的开启 binlog 服务，--log-bin[=file_name]。如果不指定路径，master 会在数据目录下生成 mysql-bin.******(* 代表 0～9 数字，表示日志的序号) 日志文件，同时生成 mysql-bin.index 文件，记录所有 binlog 的绝对路径，便于其它线程能顺利找到所需的 binlog。slave 端启动线程从 master 同步 binary log，并存放为 mysql-relay-bin.****** 文件，slave 端的 SQL 线程读取并解析 binlog，转化为可执行的 SQL 进行同步操作。
-### 锁与事务
+## 存储引擎与索引原理
+[存储引擎与索引原理](sincosmos.github.io/)
+## 锁与事务
 参考资料
 	[CS-Notes 数据库原理](https://cyc2018.github.io/CS-Notes/#/notes/%E6%95%B0%E6%8D%AE%E5%BA%93%E7%B3%BB%E7%BB%9F%E5%8E%9F%E7%90%86)
 	[MySQL 加锁处理分析](http://hedengcheng.com/?p=771#_Toc374698322)

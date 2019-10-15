@@ -32,95 +32,14 @@ tags:
 ![sql 的执行过程](https://user-gold-cdn.xitu.io/2018/8/12/1652e56415e9a6f4?imageView2/0/w/1280/h/960/format/webp/ignore-error/1)
 Mysql 缓存由`query_cache_type`参数控制打开，由 `query_cache_size` 控制缓存可用空间大小，`query_cache_limit` 控制每次能够缓存的最大结果集(`show variables like '%cache%'`)。可以通过 `show status like '%cache%'`中 `Qcache_hits` 和 `Qcache_inserts` 等来查看缓存的使用状态。MySQL将缓存存放在一个引用表（不要理解成table，可以认为是类似于HashMap的数据结构），通过一个哈希值索引，这个哈希值通过查询本身、当前要查询的数据库、客户端协议版本号等一些可能影响结果的信息计算得来。所以两个查询在任何字符上的不同（例如：空格、注释），都会导致缓存不会命中。如果查询中包含任何用户自定义函数、存储函数、用户变量、临时表、mysql库中的系统表，其查询结果都不会被缓存。比如函数NOW()或者CURRENT_DATE()会因为不同的查询时间，返回不同的查询结果，再比如包含CURRENT_USER或者CONNECION_ID()的查询语句会因为不同的用户而返回不同的结果，将这样的查询结果缓存起来没有任何的意义。既然是缓存，就会失效，那查询缓存何时失效呢？MySQL的查询缓存系统会跟踪查询中涉及的每个表，如果这些表（数据或结构）发生变化，那么和这张表相关的所有缓存数据都将失效。正因为如此，在任何的写操作时，MySQL必须将对应表的所有缓存都设置为失效。
 [MySQL逻辑架构及性能优化原理](https://juejin.im/post/5c3ef9e051882525dc62de87)
+## 线程池与连接池
+连接池通常实现在 client 端，指应用预先创建一定数量的数据库连接，利用这些连接服务客户端所有的 DB 请求。如果某一时间，应用所需的连接数大于连接池中的连接数，则请求需要排队等待空闲连接。通过连接池可以复用连接，避免应用频繁地创建和释放连接，从而减少请求的平均响应时间。并且在数据库繁忙时，可以在客户端实现请求排队，减小数据库压力。  
+线程池在 server 端实现，数据库服务器通过创建一定数量的线程服务与 DB 连接请求
 ## 存储引擎与索引原理
 [存储引擎与索引原理](sincosmos.github.io/)
 ## 锁与事务
-参考资料
-	[CS-Notes 数据库原理](https://cyc2018.github.io/CS-Notes/#/notes/%E6%95%B0%E6%8D%AE%E5%BA%93%E7%B3%BB%E7%BB%9F%E5%8E%9F%E7%90%86)
-	[MySQL 加锁处理分析](http://hedengcheng.com/?p=771#_Toc374698322)
-1) 不同的存储引擎各自实现其锁机制。常见的 MyISAM 采用表级锁，有读锁定、写锁定两种类型。
-2) InnoDB 采用行级锁和表级锁共存的方式，分为共享锁和排他锁。另外除了对行或表的锁定，InnoDB 还有表级锁定的意向锁，即意向共享锁和意向排他锁作为行锁的辅助工具。事务要获取某些行的共享锁，则必须先获得表的意向共享锁( `SELECT column FROM table ... LOCK IN SHARE MODE;`)；事务要获取某些行的排他锁，则必须先获得表的意向排他锁(`SELECT column FROM table ... FOR UPDATE;`)。意向锁可以提高锁冲突时的检查效率。
-3）行锁具体分为记录锁、间隙锁、临键锁，以上三种行锁都是实现在索引上的，如果加锁操作没有使用索引，那么该锁会退化为表锁。记录锁锁住索引对应的记录，记录锁加锁操作必须作用在唯一索引列或主键列上，否则将会变成临键锁。间隙锁锁定的是索引范围内的记录，可以是多个不连续的索引范围，事务隔离级别是 Repeatable Read 时自动开启，否则会失效。临键锁是记录锁和间隙锁的组合，临键锁在索引具有唯一性时（例如主键索引），将会降级为记录锁，以增加并发性。
-4）MVCC 多版本并发控制，当某个事务更新表数据时，MVCC 系统不会立即覆盖相应记录，而是创建相应记录的一个新版本（Data）和日志（Undo log)。Mysql 的 InnoDB 中，每一行数据除了用户数据外，数据库会自动维护一些额外的字段，和 MVCC 相关的有 `DATA_TRX_ID` 和 `DATA_ROLL_PTR`，前者是最近更新该行的 Transaction ID，每开启一个事务，事务 ID 都会增加，每个事务拿到的 ID 都不一样；后者是指向 Undo Log 中旧版本数据指针，支持了事务回滚操作，同时也支持了多个事务之间并发读的版本冲突问题。MVCC 最大的好处是读不加锁，读写不冲突，极大增加了系统的并发性能。MVCC 的读操作分为快照读和当前读。在不同的事务隔离级别下，快照读有不同的表现。在 RC 级别下，每次读都会生成一个新的快照，所以每次快照读到的都是当前其它事务提交了的最新版本；在 RR 级别下，快照读借助 MVCC 和 undo log 来实现，会在事务中第一次 SELECT 语句执行时生成，只有在本事务中对数据进行更改时才会更新快照（其它事务的提交不会引发快照的更新）
+[锁与事务](sincosmos.github.io/)
 
-5）事务隔离
-   ```
-   CREATE TABLE `student` (
-	  `id` int(11) NOT NULL AUTO_INCREMENT,
-	  `uname` varchar(60) DEFAULT NULL,
-	  `subject` varchar(60) DEFAULT NULL,
-	  `score` int(11) DEFAULT NULL,
-	  PRIMARY KEY (`id`),
-	  INDEX `uname_idx` (`uname`)
-	) ENGINE=InnoDB DEFAULT CHARSET=utf8;
-	insert into student(id, uname, subject, score) values(11, '小明', '语文', 80);
-	insert into student(id, uname, subject, score) values(12, '小明', '数学', 90);
-	insert into student(id, uname, subject, score) values(15, '小红', '语文', 82);
-	insert into student(id, uname, subject, score) values(17, '小红', '数学', 88);
-	insert into student(id, uname, subject, score) values(22, '小文', '语文', 68);
-	insert into student(id, uname, subject, score) values(26, '小文', '数学', 96);
-	insert into student(id, uname, subject, score) values(27, '小飞', '语文', 79);
-	insert into student(id, uname, subject, score) values(28, '小飞', '数学', 83);
-   ```
-
-	| id   | uname      | subject   | score |
-	| ---- |:----------:| ---------:| -----:|
-	|11    | 小明        | 语文      | 80    |
-	|12    | 小明        | 数学      | 90    |
-	|15    | 小红        | 语文      | 82    |
-	|17    | 小红        | 数学      | 88    |
-	|22    | 小文        | 语文      | 68    |
-	|26    | 小文        | 数学      | 96    |
-	|27    | 小飞        | 语文      | 79    |
-	|28    | 小飞        | 数学      | 83    |
-
-
-   事务隔离级别为读未提交时出现脏读，不可重复读和幻读现象。
-   其中脏读例如下面事务 T1 可以读到事务 T2 尚未提交的更改。
-   读未提交的隔离级别下，事务过程中读操作(例如T1)不会加读锁，虽然事务过程写操作（例如T2）会加写锁，但是事务T1的读操作会忽略T2的写锁（该写锁将在T2提交时释放），读到T2未提交的数据。
-	事务 T1
-	```
-	set autocommit = false;
-	set session transaction isolation level read uncommitted;
-	start transaction;
-	select id, uname, subject, score from student where id=15;
-	commit; 
-	``` 
-   事务 T2
-   ```
-	set autocommit = false;
-	set session transaction isolation level read uncommitted
-	start transaction;
-	update student set score=92 where id=15;
-	# sleep(5)
-	rollback; 
-	``` 
-	事务隔离级别为读已提交时出现不可重复读和幻读现象，避免了脏读。
-	在读已提交的隔离级别下，事务 T3 开启时，会生成事务版本号
-	事务 T3
-	```
-	set autocommit = false;
-	set session transaction isolation level read committed;
-	start transaction;
-	select id, uname, subject, score from student where id=15;
-	commit; 
-	``` 
-   事务 T4
-   ```
-	set autocommit = false;
-	set session transaction isolation level read committed;
-	start transaction;
-	update student set score=92 where id=15;
-	# sleep(5)
-	rollback; 
-	``` 
-	幻读
-	
-事务的四个隔离级别是 Read Uncommitted （发生脏读、不可重复读，幻读）, Read Committed（发生不可重复读，幻读）, Repeatable Read（发生幻读）, Serializable。不可重复读针对修改，指在同一个事务中，多次读取同一条记录，发现该记录中某些列值被修改过；幻读是不可重复读的特殊场景，针对新增或删除，指在同一个事务中，同一条查询语句返回的结果集行数不同。Mysql 利用 MVCC 和临键锁共同解决了默认隔离级别（Repeatable Read）下的幻读问题。
-6）在高并发场景下，间隙锁有可能导致死锁现象。[mysql 死锁问题分](https://www.cnblogs.com/LBSer/p/5183300.html)
-### 索引优化
-参考资料 [mysql 优化](http://blog.codinglabs.org/articles/theory-of-mysql-index.html)
-1) mysql 查询时，如果索引列是表达式的一部分或函数的参数，将不会使用索引，例如 select * from tab where id+1=5, select * from tab where len(id) = 3
 ## Join 的实现原理
 在 MySQL 中，只有一中 Join 算法，即 Nested Loop Join（其它数据库还提供的有 Hash Join 和 Sort Merge Join），实际上就是通过驱动表的结果集（通过 where 条件过滤）作为循环基础数据，然后一条一条的通过该结果集中的数据作为过滤条件到下一个表中查询数据，然后合并结果，如果还有第三个表参与 Join，则再通过前两个表的 Join 结果集作为循环基础数据，再一次通过循环查询条件到第三个表中查询数据，如此往复。
 ## order by 与 limit

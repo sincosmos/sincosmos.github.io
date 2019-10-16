@@ -18,6 +18,7 @@ tags:
    如果不单独配置，则可以在 mysql 安装目录 $MYSQL_HOME/data 下查看到上述文件
 3. Replication 相关文件：master.info (保存在 slave 端数据目录下，存放 master 的主机地址/端口、连接用户/密码，当前日志位置，已读取到的日志位置信息)，mysql-relay-bin.xxxxxn （存放 slave I/O 线程从 Master 端读取的 binlog 信息，然后由 Slave 端的 SQL 线程解析并转化成 Master 端执行的 SQL，从而可以在 slave 同步执行），mysql-relay-bin.index (记录relay log 存放的绝对路径)，relay-log.info  
    一般情况下，需要设置打开相应日志，mysql 才会记录相应的日志。对于 binlog 来说，在 mysql 的配置文件 my.cnf 中添加 
+   
    ```
    log-bin=mysql-bin
    binlog_format="MIXED"
@@ -30,15 +31,18 @@ tags:
 还可以把 SQL layer 层拆分为服务层和核心层，服务层主要负责和用户的交互工作，例如连接处理、授权认证、安全等；核心层主要负责数据存取预处理，例如SQL 解析、查询缓存、执行计划优化等。
 可以通过下图来了解，当一条 SQL 发送到 mysql 服务器后是怎样被执行的。
 ![sql 的执行过程](https://user-gold-cdn.xitu.io/2018/8/12/1652e56415e9a6f4?imageView2/0/w/1280/h/960/format/webp/ignore-error/1)
-Mysql 缓存由`query_cache_type`参数控制打开，由 `query_cache_size` 控制缓存可用空间大小，`query_cache_limit` 控制每次能够缓存的最大结果集(`show variables like '%cache%'`)。可以通过 `show status like '%cache%'`中 `Qcache_hits` 和 `Qcache_inserts` 等来查看缓存的使用状态。MySQL将缓存存放在一个引用表（不要理解成table，可以认为是类似于HashMap的数据结构），通过一个哈希值索引，这个哈希值通过查询本身、当前要查询的数据库、客户端协议版本号等一些可能影响结果的信息计算得来。所以两个查询在任何字符上的不同（例如：空格、注释），都会导致缓存不会命中。如果查询中包含任何用户自定义函数、存储函数、用户变量、临时表、mysql库中的系统表，其查询结果都不会被缓存。比如函数NOW()或者CURRENT_DATE()会因为不同的查询时间，返回不同的查询结果，再比如包含CURRENT_USER或者CONNECION_ID()的查询语句会因为不同的用户而返回不同的结果，将这样的查询结果缓存起来没有任何的意义。既然是缓存，就会失效，那查询缓存何时失效呢？MySQL的查询缓存系统会跟踪查询中涉及的每个表，如果这些表（数据或结构）发生变化，那么和这张表相关的所有缓存数据都将失效。正因为如此，在任何的写操作时，MySQL必须将对应表的所有缓存都设置为失效。
+### 缓存
+Mysql 缓存由`query_cache_type`参数控制打开，由 `query_cache_size` 控制缓存可用空间大小，`query_cache_limit` 控制每次能够缓存的最大结果集(`show variables like '%cache%'`)。可以通过 `show status like '%cache%'`中 `Qcache_hits` 和 `Qcache_inserts` 等来查看缓存的使用状态。  
+MySQL将缓存存放在一个引用表（不要理解成table，可以认为是类似于 HashMap 的数据结构），通过一个哈希值索引，这个哈希值通过查询本身、当前要查询的数据库、客户端协议版本号等一些可能影响结果的信息计算得来。所以两个查询在任何字符上的不同（例如：空格、注释），都会导致缓存不会命中。如果查询中包含任何用户自定义函数、存储函数、用户变量、临时表、mysql库中的系统表，其查询结果都不会被缓存。比如函数NOW()或者CURRENT_DATE()会因为不同的查询时间，返回不同的查询结果，再比如包含CURRENT_USER或者CONNECION_ID()的查询语句会因为不同的用户而返回不同的结果，将这样的查询结果缓存起来没有任何的意义。  
+既然是缓存，就会失效，那查询缓存何时失效呢？MySQL的查询缓存系统会跟踪查询中涉及的每个表，如果这些表（数据或结构）发生变化，那么和这张表相关的所有缓存数据都将失效。正因为如此，在任何的写操作时，MySQL必须将对应表的所有缓存都设置为失效。
 [MySQL逻辑架构及性能优化原理](https://juejin.im/post/5c3ef9e051882525dc62de87)
 ## 线程池与连接池
+线程池在 server 端实现，数据库服务器预先创建一定数量的线程，当有请求到达时，线程池分配一个线程提供服务，请求结束后，线程并不被销毁，而是等待或服务其它请求。
 连接池通常实现在 client 端，指应用预先创建一定数量的数据库连接，利用这些连接服务客户端所有的 DB 请求。如果某一时间，应用所需的连接数大于连接池中的连接数，则请求需要排队等待空闲连接。通过连接池可以复用连接，避免应用频繁地创建和释放连接，从而减少请求的平均响应时间。并且在数据库繁忙时，可以在客户端实现请求排队，减小数据库压力。  
-线程池在 server 端实现，数据库服务器通过创建一定数量的线程服务与 DB 连接请求
 ## 存储引擎与索引原理
 [存储引擎与索引原理](sincosmos.github.io/)
 ## 锁与事务
-[锁与事务](sincosmos.github.io/)
+[锁与事务](https://sincosmos.github.io/2019/09/24/MySQL-%E9%94%81%E4%B8%8E%E4%BA%8B%E5%8A%A1/)
 
 ## Join 的实现原理
 在 MySQL 中，只有一中 Join 算法，即 Nested Loop Join（其它数据库还提供的有 Hash Join 和 Sort Merge Join），实际上就是通过驱动表的结果集（通过 where 条件过滤）作为循环基础数据，然后一条一条的通过该结果集中的数据作为过滤条件到下一个表中查询数据，然后合并结果，如果还有第三个表参与 Join，则再通过前两个表的 Join 结果集作为循环基础数据，再一次通过循环查询条件到第三个表中查询数据，如此往复。

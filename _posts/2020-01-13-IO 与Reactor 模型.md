@@ -136,6 +136,12 @@ I/O 复用，也称为事件驱动 I/O，Reactor 模式，就是在单个线程�
 
 ![Reactor 模式](https://images0.cnblogs.com/blog/405877/201411/142333254136604.png)  
 
+Reactor 可以采用单线程实现，也就是说所有的 I/O 操作的 accept(), read(), write(), connect() 操作都是在一个线程上完成的。  
+单线程实现的 Reactor 不仅 I/O 操作在该 Reactor 线程上执行，具体处理数据的业务操作也在该线程上处理。这样程序会比较混乱，根据单一职责原则，我们应该将业务操作和单纯的 I/O 操作分离。因此，可以增加一个 worker 线程池，将具体处理 I/O 数据的业务操作交给 worker 去执行。
+进一步地，在服务器端，可以把 I/O 操作也分开，将 reactor 拆分为 mainReactor 和 subReactor。mainReactor 只有一个，负责接收所有的客户端连接请求（即 Selector 只监听 accept() 事件），然后将连接 SocketChannel 传递给 subReactor 处理。subReactor 可以有多个，例如分别处理 read() 事件和 write() 事件的两个。  
+多 Reactor 线程模式将“接受客户端的连接请求”和“与该客户端的通信”分在了两个 Reactor 线程来完成。mainReactor 完成接收客户端连接请求的操作，它不负责与客户端的通信，而是将建立好的连接转交给 subReactor 线程来完成与客户端的通信，这样一来就不会因为 read() 数据量太大而导致后面的客户端连接请求得不到即时处理的情况。并且多 Reactor 线程模式在海量的客户端并发请求的情况下，还可以通过实现 subReactor 线程池来将海量的连接分发给多个subReactor线程，在多核的操作系统中这能大大提升应用的负载和吞吐量。
+参考 [Reactor模式详解](https://www.jianshu.com/p/1ccbc6a348db)  
+Netty的线程模式就是一个实现了Reactor模式的经典模式。Netty服务端使用了“多Reactor线程模式”。
 ```
 ServerSocketChannel serverSocketChannel = ServerSocketChannel.open();
 //非阻塞
